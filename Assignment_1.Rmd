@@ -1,0 +1,532 @@
+---
+title: "Study of Linear Regression"
+author: "Digvijay Kawale"
+date: "1/15/2020"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Loading the required packages
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(corrr)
+library(MASS)
+library(psych)
+```
+
+
+# Introduction 
+
+* **Backgroud**: Flight landing.
+
+* **Motivation**: To reduce the risk of landing overrun 
+
+* **Goal**: To study what factors and how they would impact the landing distance of a commercial flight.
+
+* **Data**: Landing data (landing distance and other parameters) from 950 commercial flights (not real data set but simulated from statistical models)
+
+# Initial exploration of the data
+
+## Step 1: Importing Data sets into R Environment 
+
+* The R code for importing excel files into R environment was found through google searh. Here is its [link](https://readxl.tidyverse.org)
+
+```{r}
+Flights_800 <- read_xls("~/Desktop/Subjects/Flex 3/Statistical Modelling/WeeK 1/FAA1-1.xls")
+Flights_150 <- read_xls("~/Desktop/Subjects/Flex 3/Statistical Modelling/WeeK 1/FAA2-1.xls")
+
+```
+
+## Step 2: Study of imported data sets
+
+* The structure of the data sets is checked using the function "Str" (Structure)
+* **Data Set Flights_800:** The class of the data set is data frame with 800 observations of 8 variables. The variable aircraft is of the class 'character variable' where as the remmaining 7 variables are of the class 'numeric variables'.  
+
+```{r}
+str(Flights_800)
+
+```
+
+* **Data Set Flights_150:** The class of the data set is data frame with 150 observations of 7 variables. The variable aircraft is of the class 'character variable' where as the remmaining 6 variables are of the class 'numeric variables'. 
+
+* **Difference in Data sets:** We observe that there is a difference between two data sets 'Flights_800' and 'Flights_150'. The data set 'Flights_800' has a variable 'duration' which is not present in 'Flights_150'.  
+
+```{r}
+str(Flights_150)
+```
+
+## Step 3: Merging the two data sets
+
+* The data sets are merged using the function 'rbind' (row bind). This function is usually used when we want two append two data sets of similar kind. 
+
+* Before merging the data sets, a column 'duration' has been created in the data set 'Flights_150' to make both the data sets similar. 
+
+* After merging the data sets, the combined data set was checked for duplicates without using the column 'duration' as it was not present in the data set 'Flights_150'. The combined data set had 100 duplicates. Those duplicates are removed from the combined data set. The usage of 'Duplicated' function was found using the google search. This is the [link](https://stackoverflow.com/questions/13742446/duplicates-in-multiple-columns) where it shows the usage of the function.    
+
+
+```{r}
+
+Flights_150$duration <- NA
+
+flights_final <- rbind(Flights_800, Flights_150)
+
+flights_columns <- flights_final[c("aircraft"   ,  "no_pasg"   ,   "speed_ground" ,"speed_air"   , "height"   ,    "pitch"   , "distance"  )]
+
+flights_final <- flights_final[!duplicated(flights_columns),]
+  
+```
+
+## Step 4: Structure and summary of combined data set
+
+* The sample size of combined data set is 850 with 8 variables. The variable 'aircraft' belongs to the class of 'character varibles' and the remaining 7 variables belong the the class of 'Numeric variables'. Below is the structure of data set using the function 'str' in R:
+
+```{r}
+str(flights_final)
+```
+
+* Below are the summary statictics for all the variables in the combined data set using the function 'summary' in R. 
+
+```{r}
+summary(flights_final)
+
+```
+
+## Step 5: Summary findings for FAA agents:
+
+* The landing aircraft is required to be at least 6 meters high at the threshold of the runway. It is observed that min Height is negative. This must a data recording error as it is not possibe to have negative Height.
+
+* If the value of Ground Speed is less than 30MPH or greater than 140MPH, then the landing is considered as abnormal. It is observed that the minimum and maximum values of Ground Speed are 27.74 and 141.22 respectively. It shows that there are abnormal landings in our data set.  
+
+* If the value of Air Speed is less than 30MPH or greater than 140MPH, then the landing is considered as abnormal. It is observed that th maximum value of Air Speed is 141.72 which is abnormal. Also, there are 642 missing values in the data. 
+
+* The distribution of Distance is not normal as there a huge difference between its Median and Mean.  
+* We observe that the minimum value of duration is 14.76 mins which should not be the case as the duration of a normal flight should always be greater than 40 mins.
+
+
+# Data Cleaning and further exploration
+
+## Step 6: Removing abnormal observation from the data 
+
+* As per the abnormalities in the data, we have removed 18 observations from the data set. We now have 832 final observations with 8 variables in our data set. The abnormal values are removed using the 'filter' funtion in the 'dplyr' library. NA values are also taken care of using the function 'is.na' and they are retained in the data set.   
+
+
+```{r}
+flights_final <- filter(flights_final, ifelse(is.na(height), TRUE, height >= 6))
+
+flights_final <- filter(flights_final, ifelse(is.na(speed_ground), TRUE, (speed_ground >= 30 & speed_ground <= 140)))
+
+flights_final <- filter(flights_final, ifelse(is.na(speed_air), TRUE, (speed_air >= 30 & speed_air <= 140)))
+
+flights_final <- filter(flights_final, ifelse(is.na(duration), TRUE, duration >= 40 ))
+
+dim(flights_final)
+
+```
+
+## Step 7: Observing the structure summary of final data set. 
+
+* There are 832 observations wih 8 variables. The variable 'aircraft' is of the class character variables while the remaining 7 variables are of the class numeric variables. 
+
+```{r}
+str(flights_final)
+```
+
+* After filtering the data, we observe that there are no abnormal observations in our final data set. But there are 50 NA's in the column 'duration' and 628 NA's in the column 'speed_air'
+
+```{r}
+summary(flights_final)
+
+```
+
+* We checked for the number of observations by aircraft type using the summarize and group_by functions. We found that 444 of the observations are for the aircraft type 'airbus' and the remaining 388 observations are of the type 'boeing' 
+
+```{r}
+flights_final %>% group_by(aircraft) %>% summarize(n())
+```
+
+
+## Step 8:Histograms of all the numeric variables. 
+
+* We observe that the variables duration, no_pasg, height and pitch follow distribution closer to the normal distribution. Rest of the varibles i.e. speed_ground, speed_air and distance have curves skewed towards right. 
+
+
+```{r}
+hist(flights_final$duration)
+
+```
+
+
+```{r}
+hist(flights_final$no_pasg)
+
+```
+
+```{r}
+hist(flights_final$speed_ground)
+
+```
+
+```{r}
+hist(flights_final$speed_air)
+
+```
+
+```{r}
+hist(flights_final$height)
+
+```
+
+```{r}
+hist(flights_final$pitch)
+
+```
+
+```{r}
+hist(flights_final$distance)
+```
+
+## Step 9: Summary of the cleaned data:
+
+* We observe that there are missing values in the variables 'speed_air' and 'duration' in the cleaned data set. 
+
+* In our cleaned data set, there are no abnormal observations in the variables duration, speed_ground, speed_air, and height. 
+
+* We observe that the variables speed_ground, duration, no_pasg, height and pitch follow normal distribution. 
+
+* The variables speed_air and distance do not follow normal distribution and have their curves skewed towards right. It means that the minimum values in these variables are closer to mean and median while the maximum values are far from the mean and median. As we also observe from the summary that for all the variable except distance, the means and medians are close to each other. 
+
+* We found that 444 of the total observations are of the type 'airbus' and the remaining 388 observations are of the type 'boeing'
+
+
+
+# Initial analysis for identifying important factors that impact the response variable “landing distance”
+
+## Step 10: Finding the correlation of "Landing Distance" with all other variables 
+
+* The Table_1 shows the corrlation of "Landing Distance" with all the other variables present in the data set. It was created using the library "corrr". This was found by using the google and this is its [link](https://www.r-bloggers.com/focus-on-correlations-of-some-variables-with-many-others/)
+
+* Before creating Table_1, a variable "aircraft_num" was introduced to accomodate the character variable "aircraft"
+
+* The table is sorted in the descending order of absolute values of correlation. We see that the factor that affect most to the "Landing Distance" are "speed_air" and "speed_ground".
+
+```{r}
+
+flights_final$aircraft_num <-  ifelse(flights_final$aircraft == "airbus", 1, 0)
+
+Table_1 <- flights_final[,2:9] %>% correlate() %>% focus(distance)
+
+Table_1$direction_of_correlation <- ifelse(Table_1$distance < 0, "Negative", "Positive")
+
+Table_1  <-  rename(Table_1, size_of_correlation = distance)
+
+Table_1  <-  rename(Table_1, Variable_Names = rowname)
+
+Table_1 <- arrange(Table_1, desc(abs(Table_1$size_of_correlation)))
+
+Table_1
+```
+
+## Step 11: Confirming results using Scatter Plots
+
+* It is evident from the scatter plots that there is a stong positive correlation between the "Landing distance" with the variables "Speed_air" and "speed_ground". It has very less correlation with rest of the variables.  
+
+```{r}
+plot(flights_final$distance, flights_final$speed_air)
+```
+
+```{r}
+plot(flights_final$distance, flights_final$speed_ground)
+```
+
+```{r}
+plot(flights_final$distance, flights_final$height)
+```
+
+```{r}
+plot(flights_final$distance, flights_final$pitch)
+
+```
+```{r}
+plot(flights_final$distance, flights_final$duration)
+
+```
+
+```{r}
+plot(flights_final$distance, flights_final$no_pasg)
+```
+
+
+```{r}
+
+plot(flights_final$distance, flights_final$aircraft_num)
+
+```
+
+
+## Step 12: The aiplane make has already been considered as a factor in steps 11-12. 
+
+# Regression using a single factor each time
+
+## Step 13:
+
+```{r}
+
+speed_air <- lm(distance ~ speed_air, data = flights_final)
+speed_ground <- lm(distance ~ speed_ground, data = flights_final)
+aircraft_num <- lm(distance ~ aircraft_num, data = flights_final)
+height <- lm(distance ~ height, data = flights_final)
+pitch <- lm(distance ~ pitch, data = flights_final)
+duration <- lm(distance ~ duration, data = flights_final)
+no_pasg <- lm(distance ~ no_pasg, data = flights_final)
+
+
+variable_names <- c("speed_air", "speed_ground", "aircraft_num", "height", "pitch", "duration", "no_pasg")
+
+
+p_values <- c(
+summary(speed_air)$coefficients[2,4],
+summary(speed_ground)$coefficients[2,4],
+summary(aircraft_num)$coefficients[2,4],
+summary(height)$coefficients[2,4],
+summary(pitch)$coefficients[2,4],
+summary(duration)$coefficients[2,4],
+summary(no_pasg)$coefficients[2,4])
+
+regression_coefs <- c(
+summary(speed_air)$coefficients[2,1],
+summary(speed_ground)$coefficients[2,1],
+summary(aircraft_num)$coefficients[2,1],
+summary(height)$coefficients[2,1],
+summary(pitch)$coefficients[2,1],
+summary(duration)$coefficients[2,1],
+summary(no_pasg)$coefficients[2,1])
+
+
+Table_2 <- data.frame(variable_names, p_values, regression_coefs)
+
+Table_2$direction_of_coefficient <- ifelse(Table_2$regression_coefs < 0, "Negative", "Positive")
+
+Table_2 <- dplyr::select(Table_2, variable_names, p_values, direction_of_coefficient)
+
+Table_2 <- arrange(Table_2, p_values)
+
+Table_2
+  
+```
+
+## Step 14: Standardising all X variables 
+
+```{r}
+#Calculating Means 
+speed_air_bar <- mean(flights_final$speed_air, na.rm = TRUE)
+speed_ground_bar <- mean(flights_final$speed_ground)
+aircraft_num_bar <- mean(flights_final$aircraft_num)
+height_bar <- mean(flights_final$height)
+pitch_bar <- mean(flights_final$pitch)
+duration_bar <- mean(flights_final$duration, na.rm = TRUE)
+no_pasg_bar <- mean(flights_final$no_pasg)
+
+
+
+
+#Calculting Standard Deviations
+speed_air_sd <- sd(flights_final$speed_air, na.rm = TRUE)
+speed_ground_sd <- sd(flights_final$speed_ground)
+aircraft_num_sd <- sd(flights_final$aircraft_num)
+height_sd <- sd(flights_final$height)
+pitch_sd <- sd(flights_final$pitch)
+duration_sd <- sd(flights_final$duration, na.rm = TRUE)
+no_pasg_sd <- sd(flights_final$no_pasg)
+
+#Converting to standardised variables 
+
+flights_final$speed_air_std <- (flights_final$speed_air- speed_air_bar) * (1/speed_air_sd)
+
+flights_final$speed_ground_std <- (flights_final$speed_ground - speed_ground_bar) * (1/speed_ground_sd )
+
+flights_final$aircraft_num_std <- (flights_final$aircraft_num - aircraft_num_bar) * (1/aircraft_num_sd)
+
+flights_final$height_std <- (flights_final$height - height_bar) * (1/height_sd)
+
+flights_final$pitch_std <- (flights_final$pitch - pitch_bar) * (1/pitch_sd)
+
+flights_final$duration_std <- (flights_final$duration - duration_bar) * (1/duration_sd)
+
+flights_final$no_pasg_std <- (flights_final$no_pasg - no_pasg_bar) * (1/no_pasg_sd)
+
+
+# Regressing "Landing Distance" on the standardised X variables 
+
+speed_air_std <- lm(distance ~ speed_air_std, data = flights_final)
+speed_ground_std <- lm(distance ~ speed_ground_std, data = flights_final)
+aircraft_num_std <- lm(distance ~ aircraft_num_std, data = flights_final)
+height_std <- lm(distance ~ height_std, data = flights_final)
+pitch_std <- lm(distance ~ pitch_std, data = flights_final)
+duration_std <- lm(distance ~ duration_std, data = flights_final)
+no_pasg_std <- lm(distance ~ no_pasg_std, data = flights_final)
+
+
+variable_names_std <- c("speed_air_std", "speed_ground_std", "aircraft_num_std", "height_std", "pitch_std", "duration_std", "no_pasg_std")
+
+
+regression_coefs_std <- c(
+summary(speed_air_std)$coefficients[2,1],
+summary(speed_ground_std)$coefficients[2,1],
+summary(aircraft_num_std)$coefficients[2,1],
+summary(height_std)$coefficients[2,1],
+summary(pitch_std)$coefficients[2,1],
+summary(duration_std)$coefficients[2,1],
+summary(no_pasg_std)$coefficients[2,1])
+
+Table_3 <- data.frame(variable_names_std, regression_coefs_std)
+
+Table_3$direction_of_coefs <- ifelse(Table_3$regression_coefs_std < 0, "Negative", "Positive")
+
+Table_3
+
+```
+
+## Step 15: Final Results Table
+
+* It is observed that our results in Table 1 and Table 3 are consistent, but not consistent with the Table 2. As we observe that there are a lot of NA's in the predictor variable speed_air, the p-value when regressing speed_air on Landing distance is greater than the p-value when regressing speed_ground on Landing distance. Since there are lot of NA's in the speed_air, we should give more importance to the variable speed_ground.     
+
+```{r}
+Importance_Ranks <- c(2,1,3,4,5,6,7)
+
+Table_0 <- data.frame(variable_names, Importance_Ranks)
+
+Table_0 <- arrange(Table_0, Importance_Ranks)
+
+Table_0
+```
+
+# Checking Collinearity
+
+## Step 16:
+
+* It is observed that when "Landing Distance" is regressed on "speed_air" and speed_ground" both the predictor variables, there is an erractic change in the values of the regression coefficients. We also observe a sign change (negative) for the regression coefficient of speed ground which was positive when "Landing Distance" was only regressed on it. 
+
+* The correlation of speed_air and speed_ground is 0.99, which suggests that both these predictor variables are strongly associated with each other. 
+
+* If we want to select any one of them, we would select the speed_ground. The reason being we have seen the result Tables 1, 2, 3 that it is the most important predictor variable. 
+
+```{r}
+model_3 <- lm(distance ~ speed_air + speed_ground, data = flights_final)
+
+summary(speed_air)$coefficients[2,1]
+summary(speed_ground)$coefficients[2,1]
+summary(model_3)$coefficients[2:3,1]
+
+cor(flights_final$speed_ground, flights_final$speed_air)
+
+corr.test(flights_final[,4:5], use = 'pairwise')
+
+```
+
+# Variable selection based on our ranking in table 0. 
+
+## Step 17: Plotting R square values 
+
+```{r}
+
+model_01 <- lm(distance ~ speed_ground, data = flights_final)
+
+model_02 <- lm(distance ~ speed_air + speed_ground, data = flights_final)
+
+model_03 <- lm(distance ~ speed_air + speed_ground + aircraft_num, data = flights_final)
+
+model_04 <- lm(distance ~ speed_air + speed_ground + aircraft_num + height, data = flights_final)
+
+model_05 <- lm(distance ~ speed_air + speed_ground + aircraft_num + height + pitch, data = flights_final)
+
+model_06 <- lm(distance ~ speed_air + speed_ground + aircraft_num + height + pitch + duration, data = flights_final)
+
+model_07 <- lm(distance ~ speed_air + speed_ground + aircraft_num + height + pitch + duration + no_pasg, data = flights_final)
+
+
+r_square <- c(
+summary(model_01)$r.squared,
+summary(model_02)$r.squared,
+summary(model_03)$r.squared,
+summary(model_04)$r.squared,
+summary(model_05)$r.squared,
+summary(model_06)$r.squared,
+summary(model_07)$r.squared)
+
+no_of_predictors <- c(1,2,3,4,5,6,7)
+
+r_square_table <- data.frame(r_square, no_of_predictors)
+
+plot(r_square_table$no_of_predictors, r_square_table$r_square)
+lines(r_square_table$no_of_predictors, r_square_table$r_square)
+
+```
+
+## Step 18: Plotting adjusted R square values. 
+
+```{r}
+adj_r_square <- c(
+summary(model_01)$adj.r.squared,
+summary(model_02)$adj.r.squared,
+summary(model_03)$adj.r.squared,
+summary(model_04)$adj.r.squared,
+summary(model_05)$adj.r.squared,
+summary(model_06)$adj.r.squared,
+summary(model_07)$adj.r.squared)
+
+adj_r_square_table <- data.frame(adj_r_square, no_of_predictors)
+
+plot(adj_r_square_table$no_of_predictors, adj_r_square_table$adj_r_square)
+lines(adj_r_square_table$no_of_predictors, adj_r_square_table$adj_r_square)
+```
+
+## Step 19: Plotting AIC values
+
+```{r}
+AIC_values <- c(AIC(model_01),
+                AIC(model_02),
+                AIC(model_03),
+                AIC(model_04),
+                AIC(model_05),
+                AIC(model_06),
+                AIC(model_07))
+
+
+AIC_table <- data.frame(AIC_values, no_of_predictors)
+
+plot(AIC_table$no_of_predictors, AIC_table$AIC_values)
+lines(AIC_table$no_of_predictors, AIC_table$AIC_values)
+
+```
+ 
+## Step 20: 
+
+* Comparing the results from steps 18-19 we will only predict the response variable "Landing Distance" using the predictor variable "speed_ground".   
+
+## Variable selection based on automate algorithm.
+
+# Step 21:
+
+* We will be using the stepAIC fundtion in R to check our results in the previous steps. Since, duration and speed_air has NA's we will be excluding the, from our analysis. 
+
+* We have used the bi-directional (forward and backward) stepwise regression. The results show that the AIC value is minimum when none of the variables are removed. When we compare results with the one in Step 19, the values are different as stepAIC does not work when there are NA's in the data. We have to either remove the records with NA values or remove the variables that have NA's. In this case we have excluded the variables with NA's and hence the results are varying when compared with step 19. 
+
+```{r}
+
+flights_2 <- dplyr::select(flights_final, speed_ground, aircraft_num, height, pitch, no_pasg, distance)
+
+LM <- lm(distance ~ ., data = flights_2)
+
+fit1_LM <- stepAIC(LM, direction = 'both')
+
+```
+
